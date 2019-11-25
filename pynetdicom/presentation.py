@@ -65,7 +65,7 @@ SCP_SCU_ROLES = {
         (False, True) : DEFAULT_ROLE,
     },
     (True, True) : {
-        (None, None) : DEFAULT_ROLE,
+        (None, None) : BOTH_SCU_SCP_ROLE, # Follow RQ if AC is None
         (None, True) : DEFAULT_ROLE,
         (None, False) : DEFAULT_ROLE,
         (True, None) : DEFAULT_ROLE,
@@ -87,7 +87,7 @@ SCP_SCU_ROLES = {
         (False, True) : CONTEXT_REJECTED,  # Invalid
     },
     (False, True) : {
-        (None, None) : DEFAULT_ROLE,
+        (None, None) : INVERTED_ROLE, # Follow RQ if AC is None
         (None, True) : DEFAULT_ROLE,
         (None, False) : DEFAULT_ROLE,
         (True, None) : DEFAULT_ROLE,
@@ -613,19 +613,11 @@ def negotiate_as_acceptor(rq_contexts, ac_contexts, roles=None):
             ## SCP/SCU Role Selection Negotiation
             #   Only for (provisionally) accepted contexts
             if context.result == 0x00:
-                if None in ac_roles:
-                    # Default roles
-                    context._as_scu = False
-                    context._as_scp = True
-                    # If either ac.scu_role or ac.scp_role is None then
-                    #   don't send an SCP/SCU negotiation reply
-                    has_role = False
-                else:
-                    # Use a LUT to make changes to outcomes easier
-                    #   also its much simpler than coding if/then branches
-                    outcome = SCP_SCU_ROLES[rq_roles][ac_roles]
-                    context._as_scu = outcome[2]
-                    context._as_scp = outcome[3]
+                # Use a LUT to make changes to outcomes easier
+                #   also its much simpler than coding if/then branches
+                outcome = SCP_SCU_ROLES[rq_roles][ac_roles]
+                context._as_scu = outcome[2]
+                context._as_scp = outcome[3]
 
                 # If can't act as either SCU nor SCP then reject the context
                 if context.as_scu is False and context.as_scp is False:
@@ -638,7 +630,7 @@ def negotiate_as_acceptor(rq_contexts, ac_contexts, roles=None):
                 context.result = 0x04
                 context.transfer_syntax = [rq_context.transfer_syntax[0]]
                 result_contexts.append(context)
-            elif context.result == 0x00 and has_role:
+            elif context.result == 0x00:
                 # Create new SCP/SCU Role Selection Negotiation item
                 role = SCP_SCU_RoleSelectionNegotiation()
                 role.sop_class_uid = context.abstract_syntax
@@ -757,14 +749,9 @@ def negotiate_as_requestor(rq_contexts, ac_contexts, roles=None):
                 ac_roles = (None, None)
 
             # Skip if context rejected or acceptor ignored proposal
-            if ac_context.result == 0x00 and None not in ac_roles:
-                outcome = SCP_SCU_ROLES[rq_roles][ac_roles]
-                context._as_scu = outcome[0]
-                context._as_scp = outcome[1]
-            else:
-                # We are the association requestor, so SCU role only
-                context._as_scp = False
-                context._as_scu = True
+            outcome = SCP_SCU_ROLES[rq_roles][ac_roles]
+            context._as_scu = outcome[0]
+            context._as_scp = outcome[1]
 
         # Add any missing contexts as rejected
         else:
